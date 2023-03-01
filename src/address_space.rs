@@ -99,7 +99,39 @@ impl AddressSpace {
         start: VirtualAddress,
         flags: FlagBuilder
     ) -> Result<(), &str> {
-        todo!()
+        if !flags.read{
+            return Err("Insufficent permissions to map file.")
+        }
+        for mapping in &self.mappings {
+            if start <= mapping.addr{
+                let gap = mapping.addr - start;
+                if gap > span + PAGE_SIZE{
+                    break
+                }
+                return Err("Insufficent space at that address.")
+            }
+        }
+        if start + span + PAGE_SIZE < VADDR_MAX {
+            let mapping_addr = start;
+            let new_mapping = MapEntry::new(source, offset, span, mapping_addr, flags);
+            self.mappings.push(new_mapping);
+            self.mappings.sort_by(|a, b| a.addr.cmp(&b.addr));
+            return Ok(());
+        }
+        Err("Insufficent space at that address.")
+        
+    }
+
+    fn get_mapping_at(&self, start:usize) ->  Result<usize, &str> {
+        for (index, mapping) in self.mappings.iter().enumerate() {
+            if mapping.addr == start{
+                return Ok(index)
+            }
+            if mapping.addr > start{
+                return Err("Mapping does not exist");
+            }
+        }
+        Err("Mapping does not exist")
     }
 
     /// Remove the mapping to `DataSource` that starts at the given address.
@@ -107,30 +139,48 @@ impl AddressSpace {
     /// # Errors
     /// If the mapping could not be removed.
     pub fn remove_mapping<D: DataSource>(
-        &self,
+        &mut self,
         source: Arc<D>,
         start: VirtualAddress,
     ) -> Result<(), &str> {
-        todo!()
+        let index = self.get_mapping_at(start);
+        if index.unwrap_or(0) == start{
+            return Ok(())
+        }
+        Err("Not found")
     }
-
     /// Look up the DataSource and offset within that DataSource for a
     /// VirtualAddress / AccessType in this AddressSpace
     ///
     /// # Errors
     /// If this VirtualAddress does not have a valid mapping in &self,
     /// or if this AccessType is not permitted by the mapping
-    pub fn get_source_for_addr<D: DataSource>(
+    pub fn get_source_for_addr(
         &self,
         addr: VirtualAddress,
         access_type: FlagBuilder,
-    ) -> Result<(Arc<D>, usize), &str> {
-        todo!();
+    ) -> Result<(Arc<dyn DataSource>, usize), &str> {
+        let index = self.get_mapping_at(addr);
+        match index{
+            Ok(index) =>{
+                Ok((self.mappings[index].source.clone(), self.mappings[index].offset))
+            }
+            Err(e) => Err(e)
+        }
     }
 
     /// Helper function for looking up mappings
-    fn get_mapping_for_addr(&self, addr: VirtualAddress) -> Result<MapEntry, &str> {
-        todo!();
+    fn get_mapping_for_addr(&self, addr: VirtualAddress) -> Result<usize, &str> {
+        for (index, mapping) in self.mappings.iter().enumerate(){
+            let mapping_end = mapping.addr + mapping.span;
+            if mapping.addr > addr{
+                return Err("Mapping does not exist");
+            }
+            if mapping.addr <= addr && mapping_end>= addr {
+                return Ok(index)
+            }
+        }
+        Err("Mapping does not exist at that address")
     }
 }
 
@@ -173,7 +223,7 @@ impl FlagBuilder {
         if self.cow && self.write { // for COW to work, write needs to be off until after the copy
             return false;
         }
-        return true;
+        true
     }
 }
 /// Create a constructor and toggler for a `FlagBuilder` object. Will capture attributes, including documentation

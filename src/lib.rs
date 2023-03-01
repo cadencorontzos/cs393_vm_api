@@ -6,6 +6,7 @@ mod data_source;
 
 pub use address_space::{AddressSpace, FlagBuilder};
 pub use data_source::{DataSource, FileDataSource};
+
 use std::sync::Arc; // <- will have to make Arc ourselves for #no_std
                     // TODO: why does rustfmt say this is unused, but if I leave it out, undefined?
 
